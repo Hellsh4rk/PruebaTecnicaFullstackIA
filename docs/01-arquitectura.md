@@ -1,5 +1,16 @@
 # Arquitectura
 
+Este documento cubre el ejercicio 1.
+
+| Entregable | Dónde |
+| --- | --- |
+| Diagrama de arquitectura | [Contenedores](#contenedores) |
+| Flujo de datos | [Alta de un usuario](#alta-de-un-usuario) |
+| Justificación técnica | [Por qué cuatro almacenes](#por-qué-cuatro-almacenes) y [Síncrono, asíncrono y outbox](#síncrono-asíncrono-y-outbox) |
+| Diseño de `docker-compose.yml` | [`docker-compose.yml`](../docker-compose.yml), en la raíz. El diagrama de arriba es ese archivo |
+| DDD | [Bounded contexts](#bounded-contexts) |
+| Clean Architecture | [Clean Architecture](#clean-architecture) |
+
 ## Contenedores
 
 ```mermaid
