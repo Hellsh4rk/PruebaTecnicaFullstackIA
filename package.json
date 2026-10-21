@@ -1,0 +1,9 @@
+{
+  "name": "toka-fullstack-ia",
+  "private": true,
+  "scripts": {
+    "build:shared": "npm run build --prefix shared/contracts && npm run build --prefix shared/platform",
+    "test": "npm test --prefix shared/platform && npm test --prefix services/auth-service && npm test --prefix services/user-service && npm test --prefix services/role-service && npm test --prefix services/audit-service && npm test --prefix services/ai-agent-service && npm test --prefix services/api-gateway && npm test --prefix apps/web",
+    "build": "npm run build:shared && npm run build --prefix services/auth-service && npm run build --prefix services/user-service && npm run build --prefix services/role-service && npm run build --prefix services/audit-service && npm run build --prefix services/ai-agent-service && npm run build --prefix services/api-gateway && npm run build --prefix apps/web"
+  }
+}

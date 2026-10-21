@@ -1,0 +1,248 @@
+name: toka
+
+x-node-health: &node-health
+  interval: 10s
+  timeout: 5s
+  retries: 12
+  start_period: 40s
+
+x-common: &common
+  NODE_ENV: production
+  JWT_SECRET: ${JWT_SECRET:-toka-dev-jwt-secret-change-me-32b}
+  JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
+  JWT_REFRESH_TTL_SECONDS: ${JWT_REFRESH_TTL_SECONDS:-604800}
+  INTERNAL_TOKEN: ${INTERNAL_TOKEN:-toka-internal-dev-token}
+  TYPEORM_SYNC: "true"
+  SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@toka.local}
+  SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-Toka2026!}
+  SEED_ADMIN_NAME: ${SEED_ADMIN_NAME:-Administrador Toka}
+  REDIS_URL: redis://redis:6379
+  RABBITMQ_URL: amqp://toka:toka_secret@rabbitmq:5672
+  ROLE_SERVICE_URL: http://role-service:3003
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: toka
+      POSTGRES_PASSWORD: toka_secret
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U toka -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [toka]
+
+  mongodb:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodata:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [toka]
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [toka]
+
+  rabbitmq:
+    image: rabbitmq:4.1-management
+    environment:
+      RABBITMQ_DEFAULT_USER: toka
+      RABBITMQ_DEFAULT_PASS: toka_secret
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitdata:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 20s
+    networks: [toka]
+
+  qdrant:
+    image: qdrant/qdrant:v1.15.4
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrantdata:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/6333'"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    networks: [toka]
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: services/auth-service/Dockerfile
+    environment:
+      <<: *common
+      SERVICE_NAME: auth-service
+      PORT: 3001
+      DATABASE_URL: postgresql://toka:toka_secret@postgres:5432/auth_db
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+      audit-service: { condition: service_healthy }
+    ports: ["3001:3001"]
+    healthcheck:
+      <<: *node-health
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+    networks: [toka]
+
+  user-service:
+    build:
+      context: .
+      dockerfile: services/user-service/Dockerfile
+    environment:
+      <<: *common
+      SERVICE_NAME: user-service
+      PORT: 3002
+      DATABASE_URL: postgresql://toka:toka_secret@postgres:5432/users_db
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+      audit-service: { condition: service_healthy }
+    ports: ["3002:3002"]
+    healthcheck:
+      <<: *node-health
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3002/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+    networks: [toka]
+
+  role-service:
+    build:
+      context: .
+      dockerfile: services/role-service/Dockerfile
+    environment:
+      <<: *common
+      SERVICE_NAME: role-service
+      PORT: 3003
+      DATABASE_URL: postgresql://toka:toka_secret@postgres:5432/roles_db
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+      audit-service: { condition: service_healthy }
+    ports: ["3003:3003"]
+    healthcheck:
+      <<: *node-health
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3003/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+    networks: [toka]
+
+  audit-service:
+    build:
+      context: .
+      dockerfile: services/audit-service/Dockerfile
+    environment:
+      <<: *common
+      SERVICE_NAME: audit-service
+      PORT: 3004
+      MONGODB_URL: mongodb://mongodb:27017/audit
+    depends_on:
+      mongodb: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    ports: ["3004:3004"]
+    healthcheck:
+      <<: *node-health
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3004/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+    networks: [toka]
+
+  ai-agent-service:
+    build:
+      context: .
+      dockerfile: services/ai-agent-service/Dockerfile
+    environment:
+      <<: *common
+      SERVICE_NAME: ai-agent-service
+      PORT: 3005
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_COLLECTION: toka_knowledge
+      EMBED_DIMENSIONS: 768
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-5-nano}
+      OPENAI_EMBED_MODEL: ${OPENAI_EMBED_MODEL:-text-embedding-3-small}
+      OPENAI_INPUT_USD_PER_MILLION: ${OPENAI_INPUT_USD_PER_MILLION:-0.05}
+      OPENAI_OUTPUT_USD_PER_MILLION: ${OPENAI_OUTPUT_USD_PER_MILLION:-0.40}
+      OPENAI_EMBED_USD_PER_MILLION: ${OPENAI_EMBED_USD_PER_MILLION:-0.02}
+    depends_on:
+      qdrant: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    ports: ["3005:3005"]
+    healthcheck:
+      <<: *node-health
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3005/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+    networks: [toka]
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: services/api-gateway/Dockerfile
+    environment:
+      <<: *common
+      SERVICE_NAME: api-gateway
+      PORT: 3000
+      AUTH_SERVICE_URL: http://auth-service:3001
+      USER_SERVICE_URL: http://user-service:3002
+      ROLE_SERVICE_URL: http://role-service:3003
+      AUDIT_SERVICE_URL: http://audit-service:3004
+      AI_SERVICE_URL: http://ai-agent-service:3005
+    depends_on:
+      redis: { condition: service_healthy }
+      auth-service: { condition: service_healthy }
+      user-service: { condition: service_healthy }
+      role-service: { condition: service_healthy }
+      audit-service: { condition: service_healthy }
+    ports: ["3000:3000"]
+    healthcheck:
+      <<: *node-health
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+    networks: [toka]
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    depends_on:
+      api-gateway: { condition: service_healthy }
+    ports: ["8080:80"]
+    networks: [toka]
+
+networks:
+  toka:
+    name: toka
+
+volumes:
+  pgdata:
+  mongodata:
+  redisdata:
+  rabbitdata:
+  qdrantdata:

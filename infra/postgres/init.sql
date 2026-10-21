@@ -1,0 +1,3 @@
+CREATE DATABASE auth_db;
+CREATE DATABASE users_db;
+CREATE DATABASE roles_db;

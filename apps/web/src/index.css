@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: #ffffff;
+  color: #0c2348;
+}
+
+button, input, select, textarea {
+  font: inherit;
+}
+
+.hero-navy {
+  background:
+    radial-gradient(ellipse 560px 420px at 74% 46%, rgba(73, 214, 255, 0.28), transparent 58%),
+    radial-gradient(ellipse 320px 260px at 68% 62%, rgba(40, 110, 255, 0.22), transparent 70%),
+    linear-gradient(180deg, #071633 0%, #0a245c 100%);
+}
+
+@layer components {
+  .field {
+    @apply mt-1.5 w-full rounded-xl border border-line bg-white px-3.5 py-3 text-ink outline-none transition placeholder:text-ink/35 focus:border-sea focus:ring-2 focus:ring-sea/20;
+  }
+  .btn-navy {
+    @apply inline-flex items-center justify-center rounded-full bg-ink px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#16315f] disabled:opacity-60;
+  }
+  .btn-white {
+    @apply inline-flex items-center justify-center rounded-xl bg-white px-6 py-3 text-sm font-semibold text-ink shadow-sm transition hover:bg-mist disabled:opacity-60;
+  }
+  .btn-line {
+    @apply inline-flex items-center justify-center rounded-full border border-ink/15 bg-white px-4 py-2.5 text-sm font-medium text-ink transition hover:bg-mist;
+  }
+}
